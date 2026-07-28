@@ -1,0 +1,29 @@
+Package: elomakeR
+Title: Flexible Elo Ratings for Arbitrary Sports
+Version: 0.1.0
+Authors@R:
+    person("Matt", "Waite", email = "matt.waite@gmail.com", role = c("aut", "cre"))
+Description: Computes Elo ratings from a data frame of games for any
+    head-to-head sport. Column mapping uses tidy evaluation so games data
+    with arbitrary column names can be used directly. Supports a
+    settable learning rate (K-factor), home-field advantage, margin-of-
+    victory adjustment, tied outcomes, and season-to-season rating
+    carryover (continuous, reset, or regressed to the mean). Includes
+    helpers to suggest a learning rate and home advantage by grid
+    search against historical results, and to extract current
+    standings or plot rating trajectories.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.2
+Depends:
+    R (>= 4.1)
+Imports:
+    dplyr (>= 1.1.0),
+    rlang (>= 1.1.0),
+    tibble
+Suggests:
+    ggplot2,
+    testthat (>= 3.0.0)
+Config/testthat/edition: 3
+LazyData: true

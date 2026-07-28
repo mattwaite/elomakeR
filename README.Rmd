@@ -1,0 +1,140 @@
+---
+output: github_document
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.path = "man/figures/README-",
+  out.width = "100%"
+)
+```
+
+# elomakeR
+
+Elo ratings for arbitrary head-to-head sports, built to interface with
+the tidyverse. Column mapping uses tidy evaluation, so `calculate_elo()`
+works directly with whatever schema your games data already has -- no
+renaming required.
+
+## Installation
+
+Not (yet) on CRAN or GitHub. From a local clone:
+
+```r
+# install.packages("devtools")
+devtools::install(".")
+```
+
+## Example: 2025-26 NCAA D-I men's basketball
+
+The bundled `basketball_games` dataset (pulled with `hoopR`) has
+separate home/away columns and a real `neutral_site` flag for
+tournament games played at neither team's venue:
+
+```{r example}
+library(elomakeR)
+data(basketball_games)
+head(basketball_games[, c("date", "home_location", "away_location", "home_score", "away_score", "neutral_site")])
+```
+
+`calculate_elo()` maps these columns directly, including the neutral
+flag:
+
+```{r calculate}
+elo <- calculate_elo(
+  basketball_games,
+  date = date, team1 = home_location, team2 = away_location,
+  score1 = home_score, score2 = away_score,
+  home_team = home_location, neutral = neutral_site
+)
+elo
+```
+
+The result is a long tibble -- one row per team per game -- which plugs
+straight into dplyr/ggplot2 workflows. Current standings:
+
+```{r standings}
+latest_ratings(elo)
+```
+
+Rating trajectories for a few teams:
+
+```{r plot, fig.width=7, fig.height=4}
+library(ggplot2)
+autoplot(elo, teams = c("Duke", "Michigan", "Houston"))
+```
+
+## Tuning the learning rate and home advantage
+
+Rather than guessing `k` and `home_advantage`, search for the values
+that best predict this season's (or a prior season's) results, scored
+by log-loss:
+
+```{r tune}
+suggest_learning_rate(
+  basketball_games,
+  date = date, team1 = home_location, team2 = away_location,
+  score1 = home_score, score2 = away_score,
+  home_team = home_location, neutral = neutral_site,
+  k_grid = seq(10, 40, by = 5)
+)
+```
+
+```{r tune-ha}
+suggest_home_advantage(
+  basketball_games,
+  date = date, team1 = home_location, team2 = away_location,
+  score1 = home_score, score2 = away_score,
+  home_team = home_location, neutral = neutral_site,
+  home_advantage_grid = seq(0, 150, by = 25)
+)
+```
+
+`tune_elo()` searches both parameters jointly when they might interact.
+If the best value in a grid search lands on the edge of the grid you
+passed in, widen the grid and try again -- that's a sign the true
+optimum is further out.
+
+## Margin of victory
+
+Set `mov_adjustment = "log"` to scale the rating change up for lopsided
+wins and down for narrow ones (ties are left untouched):
+
+```{r mov}
+calculate_elo(
+  basketball_games,
+  date = date, team1 = home_location, team2 = away_location,
+  score1 = home_score, score2 = away_score,
+  home_team = home_location, neutral = neutral_site, mov_adjustment = "log"
+) |>
+  latest_ratings()
+```
+
+## Multi-season carryover
+
+For data spanning multiple seasons, map a `season` column and choose
+how ratings carry over at each season boundary: `"continuous"`
+(default), `"reset"` (back to `initial_rating`), or `"regress"` (move a
+fraction of the way back to `initial_rating`, via `regress_pct`).
+
+## A messier schema: 2025 NCAA D-I women's volleyball
+
+`calculate_elo()` doesn't care how odd the input schema is. The bundled
+`volleyball_sets` dataset uses arbitrary `team1`/`team2` labels rather
+than home/away columns, points to the home team with a separate
+`home_team` column (`team2`, here), and records the outcome as sets won
+(`team1_sets_won`/`team2_sets_won`, best of 5) rather than a single
+score:
+
+```{r volleyball}
+data(volleyball_sets)
+calculate_elo(
+  volleyball_sets,
+  date = date, team1 = team1, team2 = team2,
+  score1 = team1_sets_won, score2 = team2_sets_won,
+  home_team = team2
+) |>
+  latest_ratings()
+```
