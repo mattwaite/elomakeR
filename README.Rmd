@@ -138,3 +138,70 @@ calculate_elo(
 ) |>
   latest_ratings()
 ```
+
+## Data prep `calculate_elo()` won't do for you
+
+`calculate_elo()` will happily rename columns for you, but it assumes
+your data is already **one row per game**, with a single value each
+for `team1`, `team2`, `score1`, and `score2` on that row. Column
+mapping flexibility doesn't help if the rows themselves aren't shaped
+that way yet -- and a lot of real schedule data isn't, because it's
+built to answer "what did this team's season look like" rather than
+"what happened in this game."
+
+A concrete case: an NCAA baseball schedule scrape (one row per team per
+game, not one row per game) that looks roughly like this:
+
+```
+team_name  opponent_name  team_score  opponent_score  game_type  result  contest_id
+UCLA       UC San Diego   8           4               Home       W       6534937
+UC Irvine  Sacramento St. 5           0               Home       W       6519201
+```
+
+Three mismatches with what `calculate_elo()` expects, and none of them
+are things it should silently guess at -- getting them wrong doesn't
+raise an error, it just produces wrong ratings:
+
+- **Every game is listed twice** -- once from each team's perspective,
+  same `contest_id`, scores mirrored. Feed both rows in and that game's
+  rating update gets applied twice.
+- **Home/away is per row, not per game.** A `game_type` column of
+  `"Home"`/`"Away"`/`"Neutral"` describes *that row's* team, not a
+  fixed home team for the game -- there's no single column you can
+  point `home_team` at until you derive one.
+- **Some rows have no result yet** (canceled, postponed, rained out)
+  and no score to give `score1`/`score2`.
+
+Clean all three with ordinary dplyr before calling `calculate_elo()`:
+
+```r
+library(dplyr)
+
+games <- raw_schedule |>
+  # drop games with no final score
+  filter(result %in% c("W", "L", "T")) |>
+  # collapse the two mirrored rows into one row per real game
+  distinct(contest_id, .keep_all = TRUE) |>
+  # turn the per-row home/away/neutral indicator into one home_team column
+  mutate(
+    home_team = case_when(
+      game_type == "Home" ~ team_name,
+      game_type == "Away" ~ opponent_name,
+      TRUE ~ NA_character_
+    ),
+    neutral = game_type == "Neutral"
+  )
+
+calculate_elo(
+  games,
+  date = game_date, team1 = team_name, team2 = opponent_name,
+  score1 = team_score, score2 = opponent_score,
+  home_team = home_team, neutral = neutral, game_id = contest_id
+)
+```
+
+A cheap sanity check that you deduplicated correctly: the output of
+`calculate_elo()` always has exactly twice as many rows as its input
+(one row per team per game), so `nrow(games) * 2` should equal
+`nrow(elo)`. If a team's rating swings by an implausible amount after
+one game, mirrored duplicate rows are the first thing to check for.
