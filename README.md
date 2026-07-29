@@ -8,11 +8,11 @@ renaming required.
 
 ## Installation
 
-Not (yet) on CRAN or GitHub. From a local clone:
+Not (yet) on CRAN. From GitHub:
 
 ``` r
 # install.packages("devtools")
-devtools::install(".")
+devtools::install_github("mattwaite/elomakeR")
 ```
 
 ## Example: 2025-26 NCAA D-I men’s basketball
